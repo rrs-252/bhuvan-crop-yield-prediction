@@ -7,7 +7,7 @@ class YieldDataLoader:
         
     def _clean_data(self):
         # Convert yield columns to numeric
-        crops = ['RICE', 'WHEAT', 'MAIZE', 'PEARL MILLET']
+        crops = ['RICE', 'WHEAT', 'MAIZE', 'PEARL MILLET','BARLEY','FINGER MILLETS']
         for crop in crops:
             self.df[f'{crop} YIELD (Kg per ha)'] = pd.to_numeric(
                 self.df[f'{crop} YIELD (Kg per ha)'], errors='coerce'
