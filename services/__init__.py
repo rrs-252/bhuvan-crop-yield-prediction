@@ -1,3 +1,3 @@
-from .api_client import AgriAPIClient
+from .vedas_client import VEDASClient
 
-__all__ = ['AgriAPIClient']
+__all__ = ['VEDASClient']
