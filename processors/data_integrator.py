@@ -10,7 +10,7 @@ class AgriDataIntegrator:
         self.soil_df = self._load_soil_data()
         self.yield_df = self._load_yield_data()
         
-     def _load_coordinates(self):
+    def _load_coordinates(self):
         df = pd.read_csv(Config.COORDINATE_CSV)
         df["State"] = df["State"].str.strip().str.lower()  # Normalize state names
         return df[["District Name", "State", "Latitude", "Longitude"]]
