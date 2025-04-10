@@ -1,3 +1,3 @@
-from .data_integrator import DataIntegrator
+from .data_integrator import AgriDataIntegrator
 
-__all__ = ['DataIntegrator']
+__all__ = ['AgriDataIntegrator']
