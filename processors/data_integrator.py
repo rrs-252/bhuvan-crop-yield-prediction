@@ -10,12 +10,14 @@ class AgriDataIntegrator:
         self.soil_df = self._load_soil_data()
         self.yield_df = self._load_yield_data()
         
-    def _load_coordinates(self):
+     def _load_coordinates(self):
         df = pd.read_csv(Config.COORDINATE_CSV)
+        df["State"] = df["State"].str.strip().str.lower()  # Normalize state names
         return df[["District Name", "State", "Latitude", "Longitude"]]
     
     def _load_soil_data(self):
         soil_df = pd.read_csv(Config.SOIL_CSV)
+        soil_df["State"] = soil_df["State"].str.strip().str.lower()  # Normalize state names
         return soil_df.rename(columns={
             "OC - High": "organic_high",
             "OC - Medium": "organic_medium",
@@ -39,7 +41,8 @@ class AgriDataIntegrator:
         return None, None, None
     
     def _get_state_soil(self, state):
-        state_data = self.soil_df[self.soil_df["State"] == state]
+        state_lower = state.strip().lower()  # Normalize input state name
+        state_data = self.soil_df[self.soil_df["State"] == state_lower]
         if not state_data.empty:
             return state_data.iloc[0].to_dict()
         return None
