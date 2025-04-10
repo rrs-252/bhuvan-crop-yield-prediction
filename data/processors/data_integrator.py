@@ -1,41 +1,86 @@
 import pandas as pd
-from data.loaders.coordinate_loader import CoordinateLoader
-from services.api_client import AgriAPIClient
+import logging
+from config.settings import Config
+from services.vedas_client import VEDASClient
 
-class DataIntegrator:
+class AgriDataIntegrator:
     def __init__(self):
-        self.coord_loader = CoordinateLoader(Config.COORDINATE_CSV)
-        self.yield_loader = YieldDataLoader(Config.YIELD_CSV)
-        self.api_client = AgriAPIClient()
+        self.vedas = VEDASClient()
+        self.coord_df = self._load_coordinates()
+        self.soil_df = self._load_soil_data()
+        self.yield_df = self._load_yield_data()
         
-    def process_and_save(self):
-        yield_df = self.yield_loader.get_yield_data()
+    def _load_coordinates(self):
+        df = pd.read_csv(Config.COORDINATE_CSV)
+        return df[["District Name", "State", "Latitude", "Longitude"]]
+    
+    def _load_soil_data(self):
+        soil_df = pd.read_csv(Config.SOIL_CSV)
+        return soil_df.rename(columns={
+            "OC - High": "organic_high",
+            "OC - Medium": "organic_medium",
+            "OC - Low": "organic_low",
+            "pH - Acidic": "ph_acidic",
+            "pH - Neutral": "ph_neutral",
+            "pH - Alkaline": "ph_alkaline"
+        })
+    
+    def _load_yield_data(self):
+        return pd.read_csv(Config.YIELD_CSV)
+    
+    def _get_district_coords(self, district):
+        district_data = self.coord_df[self.coord_df["District Name"] == district]
+        if not district_data.empty:
+            return (
+                district_data["Latitude"].values[0],
+                district_data["Longitude"].values[0],
+                district_data["State"].values[0]
+            )
+        return None, None, None
+    
+    def _get_state_soil(self, state):
+        state_data = self.soil_df[self.soil_df["State"] == state]
+        if not state_data.empty:
+            return state_data.iloc[0].to_dict()
+        return None
+    
+    def integrate(self):
         records = []
         
-        for _, row in yield_df.iterrows():
-            district = row['Dist Name']
-            year = row['Year']
-            lat, lon = self.coord_loader.get_coordinates(district)
+        for _, yield_row in self.yield_df.iterrows():
+            district = yield_row["Dist Name"]
+            lat, lon, state = self._get_district_coords(district)
             
             if not lat or not lon:
+                logging.warning(f"Skipping {district} - coordinates not found")
                 continue
                 
-            agri_data = self.api_client.get_agri_data(lat, lon, year)
-            climate_data = self.api_client.get_climate_data(lat, lon, year)
+            soil_data = self._get_state_soil(state)
+            if not soil_data:
+                logging.warning(f"Skipping {district} - soil data not found for {state}")
+                continue
+                
+            # Get VEDAS data
+            ndvi_data = self.vedas.get_ndvi(lat, lon) or {}
+            climate_data = self.vedas.get_climate(lat, lon) or {}
             
-            for crop in ['RICE', 'WHEAT', 'MAIZE']:
-                yield_value = row.get(f'{crop} YIELD (Kg per ha)')
-                if pd.notna(yield_value):
-                    records.append({
-                        'district': district,
-                        'lat': lat,
-                        'lon': lon,
-                        'year': year,
-                        'crop': crop.lower(),
-                        **agri_data,
-                        **climate_data,
-                        'yield': yield_value
-                    })
-                    
+            record = {
+                "district": district,
+                "state": state,
+                "year": yield_row["Year"],
+                "lat": lat,
+                "lon": lon,
+                "ndvi": ndvi_data.get("ndvi"),
+                "rainfall": climate_data.get("rainfall"),
+                "temp_anomaly": climate_data.get("temp_anomaly"),
+                **{k: soil_data[k] for k in [
+                    "organic_high", "organic_medium", "organic_low",
+                    "ph_acidic", "ph_neutral", "ph_alkaline"
+                ]},
+                "yield": yield_row["RICE YIELD (Kg per ha)"]
+            }
+            
+            records.append(record)
+            
         pd.DataFrame(records).to_csv(Config.OUTPUT_CSV, index=False)
-        return Config.OUTPUT_CSV
+        logging.info(f"Integrated data saved to {Config.OUTPUT_CSV}")
